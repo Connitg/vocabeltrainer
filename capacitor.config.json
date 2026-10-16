@@ -1,0 +1,20 @@
+{
+  "appId": "app.learnapp.vokabeln",
+  "appName": "LearnApp",
+  "webDir": "www",
+  "backgroundColor": "#f4ebd0",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "LIGHT",
+      "initialViewportFitValueHint": "cover"
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_vocab",
+      "iconColor": "#20408F"
+    }
+  }
+}

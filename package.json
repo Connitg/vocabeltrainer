@@ -1,0 +1,29 @@
+{
+  "name": "learnapp-vokabeln",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vokabeltrainer für Schüler: Spaced Repetition, Klassenarbeits-Modus, Ordner, Handschrift. Läuft offline, ohne Konto.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "serve": "node scripts/serve.mjs",
+    "android:prepare": "node scripts/android-prepare.mjs",
+    "android:icons": "capacitor-assets generate --android --iconBackgroundColor '#20408f' --splashBackgroundColor '#f4ebd0'",
+    "android:sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/local-notifications": "^8.0.0",
+    "@capacitor/preferences": "^8.0.0",
+    "@capacitor/share": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
