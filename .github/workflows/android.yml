@@ -1,0 +1,128 @@
+# Baut die Android-App.
+#  - Bei jedem Hochladen (push): eine Test-APK, die du direkt aufs Handy installieren kannst.
+#  - Von Hand (Actions -> "Android-App bauen" -> Run workflow -> "play-store-aab"): die signierte Datei für den Play Store.
+# Die fertigen Dateien findest du nach dem Lauf ganz unten auf der Seite des Laufs unter "Artifacts".
+name: Android-App bauen
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      art:
+        description: 'Was soll gebaut werden?'
+        required: true
+        default: 'test-apk'
+        type: choice
+        options:
+          - test-apk
+          - play-store-aab
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE: ${{ github.event_name == 'workflow_dispatch' && inputs.art == 'play-store-aab' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Pakete installieren
+        run: npm install --no-audit --no-fund
+
+      - name: Lern-Logik testen
+        run: npm test
+
+      - name: Android-Projekt anlegen
+        run: '[ -d android ] || npx cap add android'
+
+      - name: Android-Projekt vorbereiten
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: node scripts/android-prepare.mjs ${{ env.RELEASE == 'true' && '--release' || '' }}
+
+      - name: Icons und Startbild erzeugen
+        run: npm run android:icons
+
+      - name: Web-Dateien in die App kopieren
+        run: npx cap sync android
+
+      # ---------- Test-APK ----------
+      - name: Test-APK bauen
+        if: env.RELEASE != 'true'
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Test-APK bereitstellen
+        if: env.RELEASE != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LearnApp-Test-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # ---------- Play-Store-Datei (AAB) ----------
+      - name: Prüfen, ob der Schlüssel hinterlegt ist
+        if: env.RELEASE == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          missing=""
+          [ -z "$KEYSTORE_B64" ] && missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -z "$KEYSTORE_PW" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ] && missing="$missing ANDROID_KEY_ALIAS"
+          if [ -n "$missing" ]; then
+            echo "::error::Es fehlen Geheimnisse (Settings -> Secrets and variables -> Actions):$missing. Siehe Anleitung, Schritt 'Schlüssel erzeugen'."
+            exit 1
+          fi
+
+      - name: AAB bauen
+        if: env.RELEASE == 'true'
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon
+
+      - name: AAB signieren
+        if: env.RELEASE == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PW: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          jarsigner -keystore "$RUNNER_TEMP/upload.jks" \
+            -storepass "$KEYSTORE_PW" -keypass "$KEYSTORE_PW" \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            -signedjar "$RUNNER_TEMP/learnapp-release.aab" \
+            android/app/build/outputs/bundle/release/app-release.aab "$KEY_ALIAS"
+          jarsigner -verify "$RUNNER_TEMP/learnapp-release.aab"
+          mkdir -p release
+          cp "$RUNNER_TEMP/learnapp-release.aab" release/learnapp-release.aab
+          rm -f "$RUNNER_TEMP/upload.jks"
+
+      - name: AAB bereitstellen
+        if: env.RELEASE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LearnApp-Play-Store-AAB
+          path: release/learnapp-release.aab
+          if-no-files-found: error
+          retention-days: 30
